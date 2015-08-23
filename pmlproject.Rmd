@@ -1,0 +1,85 @@
+---
+title: "Quanitified Self Project"
+author: "Anonymous"
+date: "August 22, 2015"
+output: html_document
+---
+
+### Introduction
+
+In this project, I will use a machine learning algorithm to predict the category of exercise technique based on a set of measurments of body movements during exercises. To begin, we will first load the necessary data and R packages.
+
+```{r, cache=TRUE, tidy=TRUE}
+# Set seed for reproducibility
+set.seed(1)
+# Load required packages
+require(caret)
+require(randomForest)
+# Read the two types of data from the csv files.
+training <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
+testing <- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!", ""))
+```
+
+### Partitioning Data
+
+Next, we will need to separate the training data into different groups to allow for cross validation. This will allow us to judge the accuracy of our model before submitting our final attempts at predicting the main test set. To do this, we will create a new training2, containing a training subset, and testing2 containing the testing subset.
+
+```{r, tidy=TRUE}
+# Create 75% partition for the new training set
+partition <- createDataPartition(training$classe, p = 0.75, list = FALSE)
+# Create the new training set
+training2 <- training[partition,]
+# Create the new testing set
+testing2 <- training[-partition, ]
+```
+
+### Preprocessing and Feature Selection
+
+Looking at the different columns, we can see that some clearly will not add to our understanding of the classe category. Obviously, data that encodes the time the exercise took place, or the identity of the participant does not predict the group. Furthermore, columns with very low variability and those containing mostly NA values will not help us. Therefore, we can now remove these types of columns.
+
+```{r, tidy=TRUE}
+# Remove the columns containing data other than movement measurements and classe
+training2   <- training2[,-c(1:7)]
+# Find columns with near zero variance
+nzc <- nearZeroVar(training2)
+# Exclude near zero variance columns 
+training2 <- training2[, -nzc]
+# Find columns with >50% NAs
+nacols <- colSums(is.na(training2))/nrow(training2) > .5
+# Remove columns with >50% NAs
+training2 <- training2[,!nacols]
+```
+
+
+### First Model Creation
+
+We are now ready to build our first model. We will attempt to use linear discriminant analysis to predict the testing2 classe data. 
+
+```{r, tidy=TRUE}
+# Construct a model using linear discriminant analysis
+ldamodel <- train(classe~., data = training2, method = "lda")
+# Predict the "classe" variable on the testing2 portion using the linear discriminant analysis model
+ldapre <- predict(ldamodel,testing2)
+# Use the confusionMatrix function to test the accuracy of the linear discriminant analysis model
+confusionMatrix(ldapre, testing2$classe)
+```
+
+In the lda model, the cross validation accuracy is 70%, and the out-of-sample error is 30%. Obviously, this is not a very close fit. Let's try a different type of model, and see if we can change this.
+
+### Second Model Creation
+```{r,tidy=TRUE}
+# Construct a model using random forests
+rfmodel <- randomForest(classe ~., data = training2)
+# Predict the "classe" variable in the testing2 set using the random forest model
+rfpre <- predict(rfmodel, testing2)
+# Use the confusionMatrix function to test the new model
+confusionMatrix(rfpre, testing2$classe)
+```
+
+With 99.5% accuracy, and an out-of-sample error of only 0.5%, the random forest model is much more accurate than the linear discriminant analysis model. We will then use this model to predict the original testing set.
+
+```{r}
+# Predict the categories of the original testing set
+finalpredictions <- predict(rfmodel, testing)
+finalpredictions
+```
